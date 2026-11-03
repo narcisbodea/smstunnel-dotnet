@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>SmsTunnel.Extensions.DependencyInjection</PackageId>
+    <RootNamespace>SmsTunnel.Extensions.DependencyInjection</RootNamespace>
+    <Title>SMSTunnel for dependency injection</Title>
+    <Description>services.AddSmsTunnel() for ASP.NET Core, worker services and other apps with dependency injection: registers ISmsTunnelClient on IHttpClientFactory, with its settings read from the SmsTunnel configuration section. Send texts from your own Android phone, from your own number.</Description>
+    <PackageTags>sms;text-message;android;phone;two-factor;2fa;verification-code;smstunnel;dependency-injection;aspnetcore;httpclientfactory</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../SmsTunnel/SmsTunnel.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SmsTunnel.Tests" />
+  </ItemGroup>
+
+</Project>

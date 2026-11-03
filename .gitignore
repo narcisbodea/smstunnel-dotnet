@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.nupkg
+*.snupkg
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Never commit keys
+.env
+*.key.json
+local-test-key.json
+appsettings.Development.json
+secrets.json

@@ -1,0 +1,31 @@
+<Project>
+  <!-- Shared by every project in the repository. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <IsPackable>false</IsPackable>
+    <!-- Package audit: fail the restore on a known vulnerability in any package, direct or transitive. -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- net8.0 is the lowest .NET the packages support (they run on .NET 9 and 10 as well): no end-of-support warning for it. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+
+  <!-- The version of both packages. Raise it (and CHANGELOG.md) for every release. -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <Authors>Narcis Bodea</Authors>
+    <Company>NARBOWEB SRL</Company>
+    <Product>SMSTunnel</Product>
+    <Copyright>Copyright (c) 2026 NARBOWEB SRL</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://smstunnel.io</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/narcisbodea/smstunnel-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>https://github.com/narcisbodea/smstunnel-dotnet/blob/main/CHANGELOG.md</PackageReleaseNotes>
+  </PropertyGroup>
+</Project>

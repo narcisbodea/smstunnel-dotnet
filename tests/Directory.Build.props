@@ -1,0 +1,19 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!-- Test projects: every supported .NET; net10.0 too with the .NET 10 SDK (MSBuild 18). -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(MSBuildVersion)', '18.0'))">net8.0;net9.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test names with underscores; no ConfigureAwait in tests; xUnit1051 (pass TestContext's token everywhere) is noise here. -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>SmsTunnel</PackageId>
+    <RootNamespace>SmsTunnel</RootNamespace>
+    <Title>SMSTunnel</Title>
+    <Description>Send texts from your own .NET apps through your own Android phone, from your own number, with SMSTunnel (smstunnel.io): texts, sign-in codes, delivery status, your phones, usage and received texts. No dependencies.</Description>
+    <PackageTags>sms;text-message;android;phone;two-factor;2fa;verification-code;sign-in-code;otp;smstunnel</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SmsTunnel.Tests" />
+  </ItemGroup>
+
+</Project>

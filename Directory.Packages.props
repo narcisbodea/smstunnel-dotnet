@@ -1,0 +1,25 @@
+<Project>
+  <!-- Central package versions. The packages keep the lowest versions they need, so a .NET 8 app is never forced to upgrade. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="SmsTunnel.Extensions.DependencyInjection">
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Sample">
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.33" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.33" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+  </ItemGroup>
+</Project>

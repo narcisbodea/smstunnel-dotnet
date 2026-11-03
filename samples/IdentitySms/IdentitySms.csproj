@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- ASP.NET Core Identity with phone confirmation and two-factor codes sent through SMSTunnel. Not packed. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>smstunnel-identity-sms-sample</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/SmsTunnel.Extensions.DependencyInjection/SmsTunnel.Extensions.DependencyInjection.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+  </ItemGroup>
+
+</Project>

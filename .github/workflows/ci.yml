@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # The .NET 10 SDK builds everything; the tests run on .NET 8, 9 and 10.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+      - run: dotnet build SmsTunnel.sln -c Release
+      - run: dotnet test tests/SmsTunnel.Tests -c Release --no-build
+      - name: Pack
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          dotnet pack src/SmsTunnel/SmsTunnel.csproj -c Release --no-build -o artifacts
+          dotnet pack src/SmsTunnel.Extensions.DependencyInjection/SmsTunnel.Extensions.DependencyInjection.csproj -c Release --no-build -o artifacts
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: packages
+          path: artifacts/
+          if-no-files-found: error
