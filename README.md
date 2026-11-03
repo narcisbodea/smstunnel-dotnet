@@ -318,13 +318,13 @@ Send only texts that people expect from you: alerts to yourself, appointment rem
 
 ```bash
 dotnet build SmsTunnel.sln
-dotnet test tests/SmsTunnel.Tests            # unit tests, HTTP mocked
+dotnet test --project tests/SmsTunnel.Tests/SmsTunnel.Tests.csproj   # unit tests, HTTP mocked (.NET 10 SDK; with .NET 8/9: dotnet test tests/SmsTunnel.Tests)
 ```
 
 The end-to-end tests (`tests/SmsTunnel.EndToEndTests`) send real texts, so they run only against a test server, never smstunnel.io; without one they are skipped. Point them at it with a JSON file `{"serverUrl": "http://127.0.0.1:3141", "apiKey": "...", "deviceId": "..."}`, or with `SMSTUNNEL_E2E_URL` and `SMSTUNNEL_E2E_API_KEY`:
 
 ```bash
-SMSTUNNEL_E2E_KEY_FILE=/path/to/test-key.json dotnet test tests/SmsTunnel.EndToEndTests -f net8.0
+SMSTUNNEL_E2E_KEY_FILE=/path/to/test-key.json dotnet test --project tests/SmsTunnel.EndToEndTests/SmsTunnel.EndToEndTests.csproj -f net8.0
 ```
 
 ## Links

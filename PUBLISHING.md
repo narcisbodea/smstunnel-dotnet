@@ -89,7 +89,7 @@ there). Packages can be unlisted on nuget.org, not deleted.
 
   ```bash
   dotnet build SmsTunnel.sln -c Release
-  dotnet test tests/SmsTunnel.Tests -c Release
+  dotnet test --project tests/SmsTunnel.Tests/SmsTunnel.Tests.csproj -c Release
   dotnet pack src/SmsTunnel/SmsTunnel.csproj -c Release -o artifacts
   dotnet pack src/SmsTunnel.Extensions.DependencyInjection/SmsTunnel.Extensions.DependencyInjection.csproj -c Release -o artifacts
   ```
