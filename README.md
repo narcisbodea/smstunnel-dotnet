@@ -151,7 +151,8 @@ builder.Services.AddSmsTunnel();
 ```
 
 ```bash
-dotnet user-secrets set "SmsTunnel:ApiKey" "<your key>"   # while developing
+dotnet user-secrets init                                  # once per project, while developing
+dotnet user-secrets set "SmsTunnel:ApiKey" "<your key>"
 export SmsTunnel__ApiKey="<your key>"                      # on a server, or your host's secret store
 ```
 
