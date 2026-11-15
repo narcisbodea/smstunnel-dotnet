@@ -26,8 +26,10 @@ public class SmsTunnelException : Exception
 /// SMSTunnel answered, but with an error. Statuses with their own subclass:
 /// 401 <see cref="SmsTunnelAuthenticationException"/>, 403 <see cref="SmsTunnelPermissionException"/>,
 /// 429 <see cref="SmsTunnelRateLimitException"/> and 5xx <see cref="SmsTunnelServerException"/>.
-/// Others: 400 (a number it cannot read, a sign-in code text without a code, a bad field), 404 (no such message for
-/// this key), 409 and 422 (an <see cref="SendOptions.IdempotencyKey"/> still in progress or reused for another text).
+/// Others: 400 (a number it cannot read, a sign-in code text without a code, a bad field, a time to schedule a text
+/// that is too soon or too far), 404 (no such message, or no such scheduled text, for this key), 409 (an
+/// <see cref="SendOptions.IdempotencyKey"/> still in progress, or a scheduled text that can no longer be canceled) and
+/// 422 (an <see cref="SendOptions.IdempotencyKey"/> reused for another text).
 /// </summary>
 [SuppressMessage("Design", "CA1032:Implement standard exception constructors", Justification = "Needs the HTTP status.")]
 public class SmsTunnelApiException : SmsTunnelException
@@ -69,6 +71,12 @@ public class SmsTunnelApiException : SmsTunnelException
 
     /// <summary>The answer's body as SMSTunnel sent it (usually JSON).</summary>
     public string? ResponseBody { get; }
+
+    /// <summary>
+    /// With <see cref="SmsTunnelErrorCodes.ScheduleLimitReached"/>: how many scheduled texts the plan lets wait at once
+    /// (SMSTunnel's <c>max</c>). Otherwise <see langword="null"/>.
+    /// </summary>
+    public int? Max { get; init; }
 }
 
 /// <summary>401: the API key is wrong, was deleted or turned off, or its account is suspended. Check it in the dashboard under <b>Apps</b>.</summary>

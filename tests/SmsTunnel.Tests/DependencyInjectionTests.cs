@@ -68,6 +68,32 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    public async Task Schedules_lists_and_cancels_through_the_injected_client()
+    {
+        const string item = """{"id":"6738c0ffee6738c0ffee6738","to":"0721123456","message":"Hi","sendAt":"2026-11-16T07:00:00.000Z","status":"scheduled"}""";
+        var answers = new Queue<string>(new[]
+        {
+            """{"success":true,"scheduled":true,"scheduledId":"6738c0ffee6738c0ffee6738","sendAt":"2026-11-16T07:00:00.000Z","data":""" + item + "}",
+            """{"success":true,"data":{"items":[""" + item + """],"total":1,"page":1,"limit":50,"waiting":1,"max":10}}""",
+            """{"success":true,"data":""" + item.Replace("scheduled", "canceled", StringComparison.Ordinal) + "}",
+        });
+        var handler = new FakeHandler(_ => FakeHandler.Json(HttpStatusCode.OK, answers.Dequeue()));
+        using ServiceProvider provider = Build(
+            new() { ["SmsTunnel:ApiKey"] = Clients.Key, ["SmsTunnel:DefaultCountryCode"] = "0040" },
+            services => services.AddSmsTunnel().ConfigurePrimaryHttpMessageHandler(() => handler));
+
+        ISmsTunnelClient sms = provider.GetRequiredService<ISmsTunnelClient>();
+        ScheduledSendResult scheduled = await sms.ScheduleSmsAsync("0721123456", "Hi", new DateTimeOffset(2026, 11, 16, 9, 0, 0, TimeSpan.FromHours(2)));
+        ScheduledTextPage page = await sms.GetScheduledTextsAsync();
+        ScheduledText canceled = await sms.CancelScheduledTextAsync(scheduled.ScheduledId);
+
+        Assert.Equal("""{"to":"0721123456","message":"Hi","defaultCountryCode":"+40","sendAt":"2026-11-16T09:00:00+02:00"}""", handler.Requests[0].Body);
+        Assert.Equal("6738c0ffee6738c0ffee6738", Assert.Single(page.Texts).Id);
+        Assert.Equal(HttpMethod.Delete, handler.Requests[2].Method);
+        Assert.Equal(ScheduledTextStatus.Canceled, canceled.Status);
+    }
+
+    [Fact]
     public void A_missing_key_says_where_to_put_it()
     {
         using ServiceProvider provider = Build(new());

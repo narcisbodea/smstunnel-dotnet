@@ -16,12 +16,14 @@ internal static class ErrorFactory
         string? errorCode = null;
         string? permission = null;
         string? message = null;
+        int? max = null;
 
         JsonElement json = TryParse(body);
         if (json.ValueKind == JsonValueKind.Object)
         {
             errorCode = JsonFields.String(json, "code");
             permission = JsonFields.String(json, "permission");
+            max = JsonFields.Int(json, "max"); // with SCHEDULE_LIMIT_REACHED
             message = MessageOf(json);
         }
         else if (!string.IsNullOrWhiteSpace(body))
@@ -39,11 +41,11 @@ internal static class ErrorFactory
 
         return statusCode switch
         {
-            401 => new SmsTunnelAuthenticationException(statusCode, message, errorCode, permission, retryAfter, body),
-            403 => new SmsTunnelPermissionException(statusCode, message, errorCode, permission, retryAfter, body),
-            429 => new SmsTunnelRateLimitException(statusCode, message, errorCode, permission, retryAfter, body),
-            >= 500 and <= 599 => new SmsTunnelServerException(statusCode, message, errorCode, permission, retryAfter, body),
-            _ => new SmsTunnelApiException(statusCode, message, errorCode, permission, retryAfter, body),
+            401 => new SmsTunnelAuthenticationException(statusCode, message, errorCode, permission, retryAfter, body) { Max = max },
+            403 => new SmsTunnelPermissionException(statusCode, message, errorCode, permission, retryAfter, body) { Max = max },
+            429 => new SmsTunnelRateLimitException(statusCode, message, errorCode, permission, retryAfter, body) { Max = max },
+            >= 500 and <= 599 => new SmsTunnelServerException(statusCode, message, errorCode, permission, retryAfter, body) { Max = max },
+            _ => new SmsTunnelApiException(statusCode, message, errorCode, permission, retryAfter, body) { Max = max },
         };
     }
 

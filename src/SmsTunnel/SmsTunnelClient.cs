@@ -34,6 +34,7 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
 {
     private const string SendPath = "api/v1/sms/send";
     private const string SendSignInCodePath = "api/v1/sms/send-2fa";
+    private const string ScheduledPath = "api/v1/sms/scheduled";
 
     private static readonly Lazy<HttpMessageHandler> SharedHandler = new(CreateHandler, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly MediaTypeWithQualityHeaderValue AcceptJson = new("application/json");
@@ -262,6 +263,95 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
         };
     }
 
+    /// <inheritdoc/>
+    public async Task<ScheduledSendResult> ScheduleSmsAsync(string phoneNumber, string message, DateTimeOffset sendAt, SendOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        (byte[] body, string? idempotencyKey) = SendRequest(phoneNumber, message, options, Inputs.SendAt(sendAt, nameof(sendAt)));
+        Answer answer = await CallAsync(HttpMethod.Post, SendPath, body, idempotencyKey, cancellationToken).ConfigureAwait(false);
+
+        JsonElement root = answer.Root;
+        JsonElement data = JsonFields.Object(root, "data");
+        string? scheduledId = JsonFields.String(root, "scheduledId") ?? JsonFields.String(data, "id");
+        if (string.IsNullOrEmpty(scheduledId))
+        {
+            // Not the answer to a scheduled text. A server that dropped sendAt would have sent the text now.
+            string? messageId = JsonFields.String(data, "messageId") ?? JsonFields.String(root, "messageId");
+            throw new SmsTunnelApiException(
+                answer.Status,
+                messageId is null
+                    ? $"SMSTunnel's answer has no scheduled text in it. Check that BaseUrl ({_baseUrl}) is the SMSTunnel API."
+                    : $"SMSTunnel sent the text now instead of scheduling it (message ID {messageId}): this server does not schedule texts. Don't send it again.",
+                responseBody: answer.Text);
+        }
+
+        ScheduledText text = ScheduledTextOf(data.ValueKind == JsonValueKind.Object ? data : root, scheduledId);
+        return new ScheduledSendResult
+        {
+            ScheduledId = scheduledId,
+            SendAt = JsonFields.Time(root, "sendAt") ?? text.SendAt,
+            Status = text.Status,
+            ScheduledText = text,
+            Replayed = answer.Replayed,
+            Raw = root,
+        };
+    }
+
+    /// <inheritdoc/>
+    public Task<ScheduledSendResult> ScheduleSmsAsync(string phoneNumber, string message, DateTime sendAt, SendOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        // Declared here too: a caller holding an SmsTunnelClient sees only the class's members, and without this one C#
+        // would turn the DateTime into a DateTimeOffset with this machine's offset, even one without a time zone.
+        return ScheduleSmsAsync(phoneNumber, message, Inputs.SendAt(sendAt, nameof(sendAt)), options, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ScheduledTextPage> GetScheduledTextsAsync(ScheduledTextsQuery? query = null, CancellationToken cancellationToken = default)
+    {
+        string path = ScheduledPath + ScheduledQueryString(query);
+        Answer answer = await CallAsync(HttpMethod.Get, path, null, null, cancellationToken).ConfigureAwait(false);
+        JsonElement data = DataOf(answer.Root);
+
+        var texts = new List<ScheduledText>();
+        if (data.ValueKind == JsonValueKind.Object
+            && data.TryGetProperty("items", out JsonElement items)
+            && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (JsonElement item in items.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object)
+                {
+                    texts.Add(ScheduledTextOf(item, fallbackId: null));
+                }
+            }
+        }
+
+        return new ScheduledTextPage
+        {
+            Texts = texts.AsReadOnly(),
+            Total = JsonFields.Int(data, "total") ?? texts.Count,
+            Page = JsonFields.Int(data, "page") ?? query?.Page ?? 1,
+            Limit = JsonFields.Int(data, "limit") ?? query?.Limit ?? texts.Count,
+            Waiting = JsonFields.Int(data, "waiting") ?? 0,
+            Max = JsonFields.Int(data, "max") ?? 0,
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<ScheduledText> GetScheduledTextAsync(string scheduledId, CancellationToken cancellationToken = default)
+    {
+        string id = Inputs.ScheduledId(scheduledId, nameof(scheduledId));
+        Answer answer = await CallAsync(HttpMethod.Get, ScheduledPath + "/" + Uri.EscapeDataString(id), null, null, cancellationToken).ConfigureAwait(false);
+        return ScheduledTextOf(DataOf(answer.Root), id);
+    }
+
+    /// <inheritdoc/>
+    public async Task<ScheduledText> CancelScheduledTextAsync(string scheduledId, CancellationToken cancellationToken = default)
+    {
+        string id = Inputs.ScheduledId(scheduledId, nameof(scheduledId));
+        Answer answer = await CallAsync(HttpMethod.Delete, ScheduledPath + "/" + Uri.EscapeDataString(id), null, null, cancellationToken).ConfigureAwait(false);
+        return ScheduledTextOf(DataOf(answer.Root), id);
+    }
+
     /// <summary>Releases the client's own <see cref="HttpClient"/>. An HttpClient you passed in is left alone.</summary>
     public void Dispose()
     {
@@ -273,13 +363,7 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
 
     private async Task<SendResult> SendAsync(string path, string phoneNumber, string message, SendOptions? options, CancellationToken cancellationToken)
     {
-        Inputs.Recipient(phoneNumber, nameof(phoneNumber));
-        Inputs.Text(message, nameof(message));
-        string? countryCode = Inputs.CountryCode(options?.DefaultCountryCode, nameof(options)) ?? _defaultCountryCode;
-        string? idempotencyKey = Inputs.IdempotencyKey(options?.IdempotencyKey, nameof(options));
-        string? deviceId = string.IsNullOrWhiteSpace(options?.DeviceId) ? null : options!.DeviceId!.Trim();
-
-        byte[] body = SendBody(phoneNumber.Trim(), message, deviceId, countryCode);
+        (byte[] body, string? idempotencyKey) = SendRequest(phoneNumber, message, options, sendAt: null);
         Answer answer = await CallAsync(HttpMethod.Post, path, body, idempotencyKey, cancellationToken).ConfigureAwait(false);
 
         JsonElement root = answer.Root;
@@ -296,6 +380,18 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
             Replayed = answer.Replayed,
             Raw = root,
         };
+    }
+
+    /// <summary>The body and the idempotency key of a send, checked as the server checks them.</summary>
+    private (byte[] Body, string? IdempotencyKey) SendRequest(string phoneNumber, string message, SendOptions? options, string? sendAt)
+    {
+        Inputs.Recipient(phoneNumber, nameof(phoneNumber));
+        Inputs.Text(message, nameof(message));
+        string? countryCode = Inputs.CountryCode(options?.DefaultCountryCode, nameof(options)) ?? _defaultCountryCode;
+        string? idempotencyKey = Inputs.IdempotencyKey(options?.IdempotencyKey, nameof(options));
+        string? deviceId = string.IsNullOrWhiteSpace(options?.DeviceId) ? null : options!.DeviceId!.Trim();
+
+        return (SendBody(phoneNumber.Trim(), message, deviceId, countryCode, sendAt), idempotencyKey);
     }
 
     private async Task<Answer> CallAsync(HttpMethod method, string path, byte[]? body, string? idempotencyKey, CancellationToken cancellationToken)
@@ -391,7 +487,7 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
 
             bool replayed = response.Headers.TryGetValues("Idempotent-Replayed", out IEnumerable<string>? values)
                 && string.Equals(string.Join(",", values).Trim(), "true", StringComparison.OrdinalIgnoreCase);
-            return new Answer(root, replayed);
+            return new Answer(root, replayed, status, text);
         }
     }
 
@@ -401,7 +497,9 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
         string seconds = timeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture);
         string advice = method == HttpMethod.Post
             ? " The text may already be on its way: retry only with the same IdempotencyKey."
-            : string.Empty;
+            : method == HttpMethod.Delete
+                ? " The scheduled text may already be canceled: check it with GetScheduledTextAsync."
+                : string.Empty;
         return new SmsTunnelTimeoutException($"SMSTunnel did not answer within {seconds} seconds.{advice}", timeout, inner);
     }
 
@@ -424,7 +522,37 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
         };
     }
 
-    private static byte[] SendBody(string to, string message, string? deviceId, string? countryCode)
+    /// <summary>One scheduled text: <c>data</c> of a schedule, read or cancel answer, or an item of the list.</summary>
+    private static ScheduledText ScheduledTextOf(JsonElement item, string? fallbackId)
+    {
+        return new ScheduledText
+        {
+            Id = JsonFields.String(item, "id") ?? fallbackId ?? string.Empty,
+            To = JsonFields.String(item, "to"),
+            Message = JsonFields.String(item, "message"),
+            SendAt = JsonFields.Time(item, "sendAt") ?? default,
+            Status = ScheduledStatusOf(JsonFields.String(item, "status")),
+            DeviceId = JsonFields.String(item, "deviceId"),
+            MessageId = JsonFields.String(item, "messageId"),
+            Error = JsonFields.String(item, "error"),
+            CreatedAt = JsonFields.Time(item, "createdAt"),
+            Raw = item,
+        };
+    }
+
+    private static ScheduledTextStatus ScheduledStatusOf(string? status)
+    {
+        return status?.Trim().ToUpperInvariant() switch
+        {
+            "SCHEDULED" => ScheduledTextStatus.Scheduled,
+            "SENT" => ScheduledTextStatus.Sent,
+            "FAILED" => ScheduledTextStatus.Failed,
+            "CANCELED" => ScheduledTextStatus.Canceled,
+            _ => ScheduledTextStatus.Unknown,
+        };
+    }
+
+    private static byte[] SendBody(string to, string message, string? deviceId, string? countryCode, string? sendAt)
     {
         var buffer = new ArrayBufferWriter<byte>(256 + (message.Length * 2));
         using (var writer = new Utf8JsonWriter(buffer, BodyWriterOptions))
@@ -442,10 +570,53 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
                 writer.WriteString("defaultCountryCode", countryCode);
             }
 
+            if (sendAt is not null)
+            {
+                writer.WriteString("sendAt", sendAt);
+            }
+
             writer.WriteEndObject();
         }
 
         return buffer.WrittenSpan.ToArray();
+    }
+
+    private static string ScheduledQueryString(ScheduledTextsQuery? query)
+    {
+        if (query is null)
+        {
+            return string.Empty;
+        }
+
+        string scope = query.Scope switch
+        {
+            ScheduledTextScope.Waiting => "waiting",
+            ScheduledTextScope.Done => "done",
+            _ => throw new ArgumentOutOfRangeException(nameof(query), query.Scope, "Scope must be Waiting or Done."),
+        };
+        var parts = new StringBuilder("?scope=").Append(scope);
+
+        if (query.Page is int page)
+        {
+            if (page < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(query), page, "Page starts at 1.");
+            }
+
+            parts.Append("&page=").Append(page.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (query.Limit is int limit)
+        {
+            if (limit is < 1 or > 100)
+            {
+                throw new ArgumentOutOfRangeException(nameof(query), limit, "Limit must be between 1 and 100.");
+            }
+
+            parts.Append("&limit=").Append(limit.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return parts.ToString();
     }
 
     private static string QueryString(ReceivedTextsQuery? query)
@@ -520,12 +691,12 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
         string? version = typeof(SmsTunnelClient).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (string.IsNullOrEmpty(version))
         {
-            return "1.0.0";
+            return "1.1.0";
         }
 
         int plus = version.IndexOf('+', StringComparison.Ordinal);
         return plus > 0 ? version.Substring(0, plus) : version;
     }
 
-    private readonly record struct Answer(JsonElement Root, bool Replayed);
+    private readonly record struct Answer(JsonElement Root, bool Replayed, int Status, string Text);
 }

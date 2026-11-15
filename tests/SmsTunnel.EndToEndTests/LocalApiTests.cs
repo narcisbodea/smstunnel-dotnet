@@ -138,6 +138,44 @@ public class LocalApiTests
     }
 
     [Fact]
+    public async Task Schedules_a_text_reads_it_lists_it_and_cancels_it_before_its_time()
+    {
+        TestServer server = TestServer.Get();
+        using SmsTunnelClient client = server.Client();
+        DateTimeOffset sendAt = DateTimeOffset.UtcNow.AddHours(2).ToOffset(TimeSpan.FromHours(2));
+
+        ScheduledSendResult scheduled = await client.ScheduleSmsAsync(TestServer.Recipient(), server.Text("scheduled, then canceled"), sendAt);
+        ScheduledText read = await client.GetScheduledTextAsync(scheduled.ScheduledId);
+        ScheduledTextPage waiting = await client.GetScheduledTextsAsync(new ScheduledTextsQuery { Limit = 100 });
+        ScheduledText canceled = await client.CancelScheduledTextAsync(scheduled.ScheduledId);
+        SmsTunnelApiException again = await Assert.ThrowsAsync<SmsTunnelApiException>(() => client.CancelScheduledTextAsync(scheduled.ScheduledId));
+
+        Assert.False(string.IsNullOrEmpty(scheduled.ScheduledId));
+        Assert.Equal(ScheduledTextStatus.Scheduled, scheduled.Status);
+        Assert.Equal(sendAt.AddTicks(-(sendAt.Ticks % TimeSpan.TicksPerSecond)), scheduled.SendAt);
+        Assert.Equal(scheduled.ScheduledId, read.Id);
+        Assert.True(read.IsWaiting);
+        Assert.Contains(waiting.Texts, text => text.Id == scheduled.ScheduledId);
+        Assert.True(waiting.Max > 0);
+        Assert.Equal(ScheduledTextStatus.Canceled, canceled.Status);
+        Assert.Equal(409, again.StatusCode);
+        Assert.Equal(SmsTunnelErrorCodes.ScheduleNotEditable, again.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Refuses_a_time_less_than_a_minute_ahead()
+    {
+        TestServer server = TestServer.Get();
+        using SmsTunnelClient client = server.Client();
+
+        SmsTunnelApiException error = await Assert.ThrowsAsync<SmsTunnelApiException>(
+            () => client.ScheduleSmsAsync(TestServer.Recipient(), server.Text("too soon"), DateTimeOffset.UtcNow.AddSeconds(5)));
+
+        Assert.Equal(400, error.StatusCode);
+        Assert.Equal(SmsTunnelErrorCodes.ScheduleTooSoon, error.ErrorCode);
+    }
+
+    [Fact]
     public async Task Lists_received_texts()
     {
         TestServer server = TestServer.Get();

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text;
 
 namespace SmsTunnel.Internal;
@@ -97,6 +98,58 @@ internal static class Inputs
         {
             throw new ArgumentException("The text is empty.", parameterName);
         }
+    }
+
+    /// <summary>
+    /// The time to send a scheduled text, as SMSTunnel takes it: <c>yyyy-MM-ddTHH:mm:ss</c> and the offset as given
+    /// (<c>Z</c> for UTC, otherwise <c>+02:00</c>), in whole seconds. Whether it is 1 minute to 30 days ahead is left
+    /// to SMSTunnel's clock (400 SCHEDULE_TOO_SOON or SCHEDULE_TOO_FAR), not this machine's.
+    /// </summary>
+    /// <remarks>
+    /// Not the round-trip format <c>"o"</c>: it writes seven digits of fractions of a second, and SMSTunnel reads at
+    /// most three (more, and it answers 400 SCHEDULE_INVALID_INPUT). A scheduled text is at least a minute ahead, so the
+    /// fractions are dropped. The invariant culture keeps the separators as they are: in a custom format, ':' is the
+    /// culture's time separator, which is '.' in some cultures, and the culture's calendar would change the year.
+    /// </remarks>
+    public static string SendAt(DateTimeOffset sendAt, string parameterName)
+    {
+        if (sendAt == default)
+        {
+            throw new ArgumentException("sendAt is not set. Give the time to send the text, 1 minute to 30 days from now.", parameterName);
+        }
+
+        return sendAt.Offset == TimeSpan.Zero
+            ? sendAt.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+            : sendAt.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// A <see cref="DateTime"/> as the moment it means: UTC, or this machine's local time. Without a time zone
+    /// (<see cref="DateTimeKind.Unspecified"/>, as from <c>new DateTime(...)</c> or most parsers) it is refused rather
+    /// than guessed: C# would otherwise turn it into a <see cref="DateTimeOffset"/> with this machine's offset, without
+    /// a word.
+    /// </summary>
+    public static DateTimeOffset SendAt(DateTime sendAt, string parameterName)
+    {
+        if (sendAt.Kind == DateTimeKind.Unspecified)
+        {
+            throw new ArgumentException(
+                "sendAt has no time zone (DateTimeKind.Unspecified), so the moment it means is unknown. Pass a DateTimeOffset, " +
+                "or a DateTime whose Kind is Utc or Local.",
+                parameterName);
+        }
+
+        return new DateTimeOffset(sendAt);
+    }
+
+    public static string ScheduledId(string scheduledId, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(scheduledId))
+        {
+            throw new ArgumentException("Give the scheduled text's ID: ScheduledSendResult.ScheduledId or ScheduledText.Id.", parameterName);
+        }
+
+        return scheduledId.Trim();
     }
 
     public static string ApiKey(string? apiKey, string parameterName)
