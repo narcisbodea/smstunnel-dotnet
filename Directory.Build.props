@@ -17,7 +17,7 @@
 
   <!-- The version of both packages. Raise it (and CHANGELOG.md) for every release. -->
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Authors>Narcis Bodea</Authors>
     <Company>NARBOWEB SRL</Company>
     <Product>SMSTunnel</Product>

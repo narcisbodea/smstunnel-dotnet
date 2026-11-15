@@ -12,7 +12,7 @@ Get the app: [SMSTunnel on Google Play](https://play.google.com/store/apps/detai
 
 | Package | What it is |
 | --- | --- |
-| [`SmsTunnel`](https://www.nuget.org/packages/SmsTunnel) | The client: texts, sign-in codes, status, phones, usage, received texts. No dependencies. |
+| [`SmsTunnel`](https://www.nuget.org/packages/SmsTunnel) | The client: texts (now or at a time you choose), sign-in codes, status, phones, usage, received texts. No dependencies. |
 | [`SmsTunnel.Extensions.DependencyInjection`](https://www.nuget.org/packages/SmsTunnel.Extensions.DependencyInjection) | `services.AddSmsTunnel()` for ASP.NET Core and other apps with dependency injection: settings from configuration, `IHttpClientFactory`. |
 
 Both need .NET 8 or newer (.NET 9 and .NET 10 too). The client is trimming- and Native AOT-safe.
@@ -70,6 +70,35 @@ result.Replayed;  // true when this is the stored answer to an earlier call with
 ```
 
 One call sends one text to one number. To text several people, call `SendSmsAsync` once for each.
+
+### Scheduled texts
+
+`ScheduleSmsAsync` gives SMSTunnel a text now to send later, 1 minute to 30 days ahead. At that time SMSTunnel sends it exactly as if your app had called `SendSmsAsync` then, with the same key: the phone, the country code and the day's allowance are those of that moment, and the text counts then. If the phone is offline at that time, the text waits for it, up to 3 days.
+
+```csharp
+ScheduledSendResult scheduled = await sms.ScheduleSmsAsync(
+    "+14155550123",
+    "Reminder: your appointment is tomorrow at 10:30.",
+    new DateTimeOffset(2026, 11, 16, 18, 0, 0, TimeSpan.FromHours(2)), // a DateTimeOffset, or a DateTime with Kind Utc or Local
+    new SendOptions { IdempotencyKey = "appointment-981-reminder" });  // the same options as SendSmsAsync
+
+scheduled.ScheduledId; // keep it to look the text up or cancel it
+scheduled.SendAt;      // when it goes out, in UTC
+
+ScheduledTextPage page = await sms.GetScheduledTextsAsync(); // the ones still waiting, soonest first
+foreach (ScheduledText text in page.Texts)
+{
+    Console.WriteLine($"{text.SendAt.ToLocalTime():g} {text.To}: {text.Message}");
+}
+
+await sms.CancelScheduledTextAsync(scheduled.ScheduledId); // while it waits
+```
+
+- The time is sent with its offset, so it means the same moment wherever your app and SMSTunnel run. A `DateTime` without a time zone (`DateTimeKind.Unspecified`) is refused with `ArgumentException` rather than guessed.
+- The list shows only the texts this key scheduled. `new ScheduledTextsQuery { Scope = ScheduledTextScope.Done }` lists the ones that went out, failed or were canceled, newest first; SMSTunnel keeps them for 30 days. `GetScheduledTextAsync(id)` reads one.
+- Once a text went out, its `Status` is `Sent` and its `MessageId` works with `GetMessageStatusAsync`, for the delivery. A `Failed` one says why in `Error`, for example `limit_reached` (the plan's allowance was used up at its time).
+- The plan caps how many texts wait at once: Free 10, Starter 50, Standard 200, Professional 500, Enterprise 1000, for the whole account (`page.Waiting` and `page.Max`). Over it, `SmsTunnelPermissionException` with `ErrorCode` `SCHEDULE_LIMIT_REACHED` and `Max`.
+- A time less than a minute or more than 30 days ahead is refused (400, `SCHEDULE_TOO_SOON`, `SCHEDULE_TOO_FAR`), and so is canceling a text that already went out or was canceled (409, `SCHEDULE_NOT_EDITABLE`). Sign-in codes can't be scheduled.
 
 ### Send a sign-in or verification code
 
@@ -130,7 +159,7 @@ page.HasMore; // ask for the next page
 
 You can also have SMSTunnel post each received text to your own address: in the dashboard, **Apps** → the key → **Forward received texts**.
 
-Results are records. `SendResult`, `MessageStatus`, `Usage`, `Phone` and `ReceivedText` also have a `Raw` property with SMSTunnel's answer as a `JsonElement`, for fields this version doesn't map yet.
+Results are records. `SendResult`, `ScheduledSendResult`, `ScheduledText`, `MessageStatus`, `Usage`, `Phone` and `ReceivedText` also have a `Raw` property with SMSTunnel's answer as a `JsonElement`, for fields this version doesn't map yet.
 
 ## ASP.NET Core
 
@@ -241,10 +270,10 @@ Every call throws an `SmsTunnelException` when it doesn't go through:
 | `SmsTunnelPermissionException` (403) | The key lacks a permission (`ErrorCode` is `PERMISSION_REQUIRED` and `Permission` names it, e.g. `sms:inbox`), or the plan doesn't include the feature. |
 | `SmsTunnelRateLimitException` (429) | Too many requests: `RetryAfter` says how long to wait. Without `RetryAfter`, the plan's limit for the day or month is reached and the message says when texts can go out again. |
 | `SmsTunnelServerException` (5xx) | A problem on SMSTunnel's side. |
-| `SmsTunnelApiException` | The base of the four above, and every other error answer: 400 (a number it can't read, a code text without a code), 404 (no such message), 409/422 (an `IdempotencyKey` still in progress, or reused for another text). |
+| `SmsTunnelApiException` | The base of the four above, and every other error answer: 400 (a number it can't read, a code text without a code, a time to schedule that is too soon or too far), 404 (no such message or scheduled text), 409/422 (an `IdempotencyKey` still in progress, or reused for another text; a scheduled text that can no longer be canceled). |
 | `SmsTunnelConnectionException` | No answer: DNS, TLS, a refused or broken connection. `SmsTunnelTimeoutException` when none came within `Timeout`. |
 
-Each `SmsTunnelApiException` has the HTTP `StatusCode`, SMSTunnel's `ErrorCode` (see `SmsTunnelErrorCodes`), `Permission`, `RetryAfter`, `ResponseBody`, and SMSTunnel's own explanation as `Message`. Bad arguments (an empty number, two numbers in one, a country code that isn't one) throw `ArgumentException` before anything is sent; a cancelled `CancellationToken` throws `OperationCanceledException`.
+Each `SmsTunnelApiException` has the HTTP `StatusCode`, SMSTunnel's `ErrorCode` (see `SmsTunnelErrorCodes`), `Permission`, `RetryAfter`, `Max` (with `SCHEDULE_LIMIT_REACHED`), `ResponseBody`, and SMSTunnel's own explanation as `Message`. Bad arguments (an empty number, two numbers in one, a country code that isn't one) throw `ArgumentException` before anything is sent; a cancelled `CancellationToken` throws `OperationCanceledException`.
 
 ```csharp
 try
@@ -275,7 +304,7 @@ The client never retries on its own. After a timeout, a connection error or a 5x
 
 `new SmsTunnelClient(httpClient, options)` sends through your `HttpClient` (it doesn't dispose it). Build its handler with `AllowAutoRedirect = false`, so the key is never sent to another address. `SmsTunnelClientOptions.BaseUrl` points the client at a test server; the default is `https://smstunnel.io`.
 
-In your own tests, mock `ISmsTunnelClient`, or give the client an `HttpClient` with a fake `HttpMessageHandler`. Results are records with `init` properties, so tests can build them: `new SendResult { MessageId = "test-1" }`.
+In your own tests, mock `ISmsTunnelClient`, or give the client an `HttpClient` with a fake `HttpMessageHandler`. Results are records with `init` properties, so tests can build them: `new SendResult { MessageId = "test-1" }`. The scheduled-text members of `ISmsTunnelClient` came in 1.1.0 with default implementations that throw `NotSupportedException`, so a class you wrote against 1.0.0 still compiles; implement them when you use them.
 
 ## Notes and limits
 
@@ -284,6 +313,7 @@ In your own tests, mock `ISmsTunnelClient`, or give the client an `HttpClient` w
 - **Length**: up to 1600 characters (10 joined SMS); sign-in codes up to 320.
 - **Numbers**: use the international format (`+14155550123`). For local numbers, set `DefaultCountryCode` (`+49`, `49` and `0049` all work): the text's own wins over the client's, and either wins over the phone's country.
 - **Offline phone**: the text waits (`Queued`) and goes out when the phone is back online.
+- **Scheduled texts**: 1 minute to 30 days ahead; up to 10 (Free) to 1000 (Enterprise) waiting at once.
 
 ## Build it with an AI assistant
 
@@ -296,6 +326,7 @@ Use the NuGet package SmsTunnel (dotnet add package SmsTunnel). In ASP.NET Core 
 API facts:
 - SendSmsAsync(phoneNumber, message, new SendOptions { DeviceId, DefaultCountryCode, IdempotencyKey }, cancellationToken) calls POST https://smstunnel.io/api/v1/sms/send with the header X-API-Key and the JSON body {"to", "message", "deviceId"?, "defaultCountryCode"?}. It returns MessageId and Queued.
 - One recipient per call. To text several people, call it once per number.
+- ScheduleSmsAsync(phoneNumber, message, sendAt, options) sends it later instead (sendAt is a DateTimeOffset, 1 minute to 30 days ahead; "sendAt" in the same POST body) and returns ScheduledId. GetScheduledTextsAsync, GetScheduledTextAsync(id) and CancelScheduledTextAsync(id) list, read and cancel the texts this key scheduled. Sign-in codes can't be scheduled.
 - SendSignInCodeAsync (POST /api/v1/sms/send-2fa) is only for sign-in codes: the text must contain a code of 4 to 10 digits standing on its own (e.g. 482913 or 123-456), at most 320 characters; it uses a separate allowance.
 - Numbers in international format (+14155550123). DefaultCountryCode (e.g. "+40") completes numbers written without + or 00.
 - Limits: 30 sends a minute per key, 1600 characters a text.

@@ -3,6 +3,28 @@
 All notable changes to `SmsTunnel` and `SmsTunnel.Extensions.DependencyInjection` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the packages use [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-11-15
+
+### Added
+
+- Scheduled texts. `ScheduleSmsAsync(phoneNumber, message, sendAt, options)` gives SMSTunnel a text to send later, 1
+  minute to 30 days ahead (`POST /api/v1/sms/send` with `sendAt`), and returns a `ScheduledSendResult`:
+  `ScheduledId`, `SendAt`, `Status`, the `ScheduledText` and `Replayed`. At that time SMSTunnel sends it as if it were
+  sent then with the same key. `sendAt` is a `DateTimeOffset`, sent with its offset in whole seconds; a `DateTime`
+  overload takes `Kind` `Utc` or `Local` and refuses `Unspecified` instead of guessing. The `SendOptions` are the same
+  as for `SendSmsAsync`, `IdempotencyKey` included.
+- `GetScheduledTextsAsync` (a `ScheduledTextsQuery` with `Scope` `Waiting` or `Done`, `Page` and `Limit`; a
+  `ScheduledTextPage` with `Waiting` and the plan's `Max`), `GetScheduledTextAsync` and `CancelScheduledTextAsync`,
+  for the texts the key scheduled. `ScheduledText` has the number, the text, `SendAt`, `Status`, `DeviceId`,
+  `MessageId` once it went out (for `GetMessageStatusAsync`), `Error` and `CreatedAt`.
+- `SmsTunnelErrorCodes`: the `SCHEDULE_*` codes. `SmsTunnelApiException.Max`: with `SCHEDULE_LIMIT_REACHED`, how many
+  texts the plan lets wait at once.
+
+### Compatibility
+
+- The new members of `ISmsTunnelClient` have default implementations that throw `NotSupportedException`, so classes
+  written against 1.0.0 still compile. `SendSmsAsync`, `SendOptions` and `SendResult` are unchanged.
+
 ## [1.0.0] - 2026-11-03
 
 ### Added
