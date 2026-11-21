@@ -691,7 +691,7 @@ public sealed class SmsTunnelClient : ISmsTunnelClient, IDisposable
         string? version = typeof(SmsTunnelClient).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (string.IsNullOrEmpty(version))
         {
-            return "1.1.0";
+            return "1.1.1";
         }
 
         int plus = version.IndexOf('+', StringComparison.Ordinal);

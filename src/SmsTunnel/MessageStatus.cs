@@ -12,10 +12,15 @@ public enum MessageState
     /// <summary>Waiting for the phone (for example while it is offline).</summary>
     Pending,
 
-    /// <summary>The phone sent it.</summary>
+    /// <summary>
+    /// The phone sent it. This is the last good state today: the SMSTunnel app gets no delivery reports, so a text that
+    /// went out stays <see cref="Sent"/>.
+    /// </summary>
     Sent,
 
-    /// <summary>The recipient's network confirmed delivery.</summary>
+    /// <summary>
+    /// Reserved for a delivery report. The app gets none today, so the texts you send don't reach this state.
+    /// </summary>
     Delivered,
 
     /// <summary>It could not be sent; <see cref="MessageStatus.ErrorMessage"/> says why.</summary>
@@ -43,14 +48,21 @@ public sealed record MessageStatus
     /// <summary>When the phone sent it.</summary>
     public DateTimeOffset? SentAt { get; init; }
 
-    /// <summary>When delivery was confirmed.</summary>
+    /// <summary>
+    /// When a delivery report arrived. Reserved, like <see cref="MessageState.Delivered"/>: the texts you send don't
+    /// have it today.
+    /// </summary>
     public DateTimeOffset? DeliveredAt { get; init; }
 
     /// <summary>Why it failed, or why it is unconfirmed.</summary>
     public string? ErrorMessage { get; init; }
 
-    /// <summary><see langword="true"/> once the state will not change any more: delivered, failed or unconfirmed.</summary>
-    public bool IsFinal => State is MessageState.Delivered or MessageState.Failed or MessageState.Unconfirmed;
+    /// <summary>
+    /// <see langword="true"/> once there is nothing more to wait for: sent, delivered, failed or unconfirmed. A text the
+    /// phone sent stays <see cref="MessageState.Sent"/>, because the app gets no delivery reports.
+    /// </summary>
+    public bool IsFinal =>
+        State is MessageState.Sent or MessageState.Delivered or MessageState.Failed or MessageState.Unconfirmed;
 
     /// <summary>SMSTunnel's whole answer, for fields this version does not map.</summary>
     public JsonElement Raw { get; init; }

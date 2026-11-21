@@ -96,7 +96,7 @@ await sms.CancelScheduledTextAsync(scheduled.ScheduledId); // while it waits
 
 - The time is sent with its offset, so it means the same moment wherever your app and SMSTunnel run. A `DateTime` without a time zone (`DateTimeKind.Unspecified`) is refused with `ArgumentException` rather than guessed.
 - The list shows only the texts this key scheduled. `new ScheduledTextsQuery { Scope = ScheduledTextScope.Done }` lists the ones that went out, failed or were canceled, newest first; SMSTunnel keeps them for 30 days. `GetScheduledTextAsync(id)` reads one.
-- Once a text went out, its `Status` is `Sent` and its `MessageId` works with `GetMessageStatusAsync`, for the delivery. A `Failed` one says why in `Error`, for example `limit_reached` (the plan's allowance was used up at its time).
+- Once a text went out, its `Status` is `Sent` and its `MessageId` works with `GetMessageStatusAsync`, to see whether the phone sent it. A `Failed` one says why in `Error`, for example `limit_reached` (the plan's allowance was used up at its time).
 - The plan caps how many texts wait at once: Free 10, Starter 50, Standard 200, Professional 500, Enterprise 1000, for the whole account (`page.Waiting` and `page.Max`). Over it, `SmsTunnelPermissionException` with `ErrorCode` `SCHEDULE_LIMIT_REACHED` and `Max`.
 - A time less than a minute or more than 30 days ahead is refused (400, `SCHEDULE_TOO_SOON`, `SCHEDULE_TOO_FAR`), and so is canceling a text that already went out or was canceled (409, `SCHEDULE_NOT_EDITABLE`). Sign-in codes can't be scheduled.
 
@@ -114,10 +114,12 @@ The text must contain the code as a number of its own, 4 to 10 digits (`482913` 
 MessageStatus status = await sms.GetMessageStatusAsync(result.MessageId); // needs sms:read
 
 status.State;        // Pending, Sent, Delivered, Failed or Unconfirmed
-status.IsFinal;      // true once it won't change: Delivered, Failed or Unconfirmed
+status.IsFinal;      // true once there's nothing more to wait for: Sent, Delivered, Failed or Unconfirmed
 status.SentAt;       // DateTimeOffset?
 status.ErrorMessage; // why it failed
 ```
+
+`Sent` is the last good status today: the SMSTunnel app gets no delivery reports, so a text that went out stays `Sent`. `Delivered` is reserved.
 
 `Unconfirmed` means the phone handed the text to the SIM but never got the confirmation: it most likely went out, and it is never resent automatically. Don't resend it yourself.
 

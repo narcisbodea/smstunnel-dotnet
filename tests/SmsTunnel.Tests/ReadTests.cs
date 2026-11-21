@@ -27,7 +27,7 @@ public class ReadTests
         Assert.Equal("m1", status.Id);
         Assert.Equal("+14155550123", status.PhoneNumber);
         Assert.Equal(MessageState.Sent, status.State);
-        Assert.False(status.IsFinal);
+        Assert.True(status.IsFinal);
         Assert.Equal(new DateTimeOffset(2026, 11, 3, 19, 41, 46, 622, TimeSpan.Zero), status.SentAt);
         Assert.Null(status.DeliveredAt);
         Assert.Null(status.ErrorMessage);
@@ -37,6 +37,7 @@ public class ReadTests
     [InlineData("""{"status":"failed","unconfirmed":true,"deliveryStatus":"unconfirmed"}""", MessageState.Unconfirmed, true)]
     [InlineData("""{"status":"failed","unconfirmed":true}""", MessageState.Unconfirmed, true)]
     [InlineData("""{"status":"failed","deliveryStatus":"failed"}""", MessageState.Failed, true)]
+    [InlineData("""{"status":"sent","deliveryStatus":"sent"}""", MessageState.Sent, true)]
     [InlineData("""{"status":"delivered"}""", MessageState.Delivered, true)]
     [InlineData("""{"status":"pending","deliveryStatus":"pending"}""", MessageState.Pending, false)]
     [InlineData("""{"status":"sent","deliveryStatus":"read-by-martians"}""", MessageState.Unknown, false)]
@@ -50,6 +51,26 @@ public class ReadTests
         Assert.Equal(state, status.State);
         Assert.Equal(final, status.IsFinal);
         Assert.Equal("m1", status.Id);
+    }
+
+    [Fact]
+    public void IsFinal_knows_every_state()
+    {
+        var expected = new Dictionary<MessageState, bool>
+        {
+            [MessageState.Unknown] = false,
+            [MessageState.Pending] = false,
+            [MessageState.Sent] = true,
+            [MessageState.Delivered] = true,
+            [MessageState.Failed] = true,
+            [MessageState.Unconfirmed] = true,
+        };
+
+        Assert.Equal(Enum.GetValues<MessageState>().Length, expected.Count);
+        foreach ((MessageState state, bool final) in expected)
+        {
+            Assert.Equal(final, new MessageStatus { Id = "m1", State = state }.IsFinal);
+        }
     }
 
     [Fact]

@@ -57,8 +57,8 @@ public sealed record ScheduledText
     public string? DeviceId { get; init; }
 
     /// <summary>
-    /// Once it went out: the text's ID, for <see cref="ISmsTunnelClient.GetMessageStatusAsync"/> (whether it was
-    /// delivered). <see langword="null"/> until then.
+    /// Once it went out: the text's ID, for <see cref="ISmsTunnelClient.GetMessageStatusAsync"/> (whether the phone
+    /// sent it). <see langword="null"/> until then.
     /// </summary>
     public string? MessageId { get; init; }
 

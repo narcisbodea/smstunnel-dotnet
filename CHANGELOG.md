@@ -3,6 +3,19 @@
 All notable changes to `SmsTunnel` and `SmsTunnel.Extensions.DependencyInjection` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the packages use [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] - 2026-11-21
+
+### Fixed
+
+- `MessageStatus.IsFinal` is now `true` for `Sent`. The SMSTunnel app gets no delivery reports, so a text that went out
+  stays `Sent`, and code waiting "until final" never stopped. `Sent` is the last good status today; `Delivered` is
+  reserved and still counts as final. `Pending` and `Unknown` are still not final.
+- The docs no longer promise a delivery confirmation.
+
+### Compatibility
+
+- Only `IsFinal` changes. If your code waits for `IsFinal` and then looks for `Delivered`, treat `Sent` as success too.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added
